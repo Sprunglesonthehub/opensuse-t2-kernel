@@ -1,4 +1,4 @@
-name: Build and Release Patched Kernel
+name: Build and Release Stable OpenSUSE Kernel with T2 Patches
 
 on:
   push:
@@ -12,6 +12,7 @@ on:
 env:
   ARCH: x86_64
   RPM_DIR: /home/runner/rpmbuild/RPMS/x86_64
+  STABLE_BRANCH: stable  # This targets OpenSUSE's stable kernel branch
 
 jobs:
   build-release:
@@ -40,11 +41,18 @@ jobs:
           ncurses-devel perl python3 rpm-build \
           patch cpio xz gzip rsync kmod
 
-    - name: Clone OpenSUSE kernel
+    - name: Clone OpenSUSE kernel (stable branch)
       run: |
-        git clone --depth=1 --branch=release/${{ steps.version.outputs.VERSION }} https://github.com/openSUSE/kernel.git
+        git clone --depth=1 --branch=${{ env.STABLE_BRANCH }} https://github.com/openSUSE/kernel.git
         cd kernel
         git submodule update --init --recursive
+
+    - name: Checkout specific version if specified
+      if: steps.version.outputs.VERSION != ''
+      working-directory: ./kernel
+      run: |
+        git fetch --tags
+        git checkout ${{ steps.version.outputs.VERSION }}
 
     - name: Clone T2 patches
       run: |
