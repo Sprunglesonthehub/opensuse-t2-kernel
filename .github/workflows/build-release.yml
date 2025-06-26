@@ -86,12 +86,18 @@ jobs:
         # Finalize configuration
         make olddefconfig
 
-    - name: Clean working tree for RPM build
+    - name: Clean working tree while preserving config
       working-directory: ./kernel
       run: |
-        # Clean any untracked files to avoid the warning
+        # Preserve the .config file
+        cp .config ../kernel.config
+        
+        # Clean the working tree
         git clean -fdx
         git reset --hard
+        
+        # Restore the config file
+        mv ../kernel.config .config
 
     - name: Set up RPM build environment
       run: |
