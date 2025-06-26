@@ -38,7 +38,8 @@ jobs:
         zypper --non-interactive install \
           git make gcc flex bison bc openssl-devel \
           ncurses-devel perl python3 rpm-build \
-          patch cpio xz gzip rsync kmod hostname
+          patch cpio xz gzip rsync kmod hostname \
+          elfutils-devel libdw-devel libelf-devel dwarves
 
     - name: Clone OpenSUSE kernel (stable branch)
       run: |
@@ -84,6 +85,13 @@ jobs:
         
         # Finalize configuration
         make olddefconfig
+
+    - name: Clean working tree for RPM build
+      working-directory: ./kernel
+      run: |
+        # Clean any untracked files to avoid the warning
+        git clean -fdx
+        git reset --hard
 
     - name: Set up RPM build environment
       run: |
