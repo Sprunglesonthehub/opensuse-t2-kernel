@@ -1,0 +1,92 @@
+name: Build and Release Patched Kernel
+
+on:
+  push:
+    tags: 'v*'  # Trigger on version tags (e.g., v6.6.21-t2)
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Kernel version (e.g., 6.6.21)'
+        required: true
+
+env:
+  ARCH: x86_64
+  RPM_DIR: /home/runner/rpmbuild/RPMS/${{ env.ARCH }}
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    container:
+      image: opensuse/tumbleweed:latest
+      options: --privileged
+
+    steps:
+    - name: Determine version
+      id: version
+      run: |
+        if [[ ${{ github.event_name }} == 'workflow_dispatch' ]]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          # Extract version from tag (v6.6.21-t2 -> 6.6.21)
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" | cut -d'-' -f1 >> $GITHUB_OUTPUT
+        fi
+        echo "Using version: ${{ steps.version.outputs.VERSION }}"
+
+    - name: Install dependencies
+      run: |
+        zypper --non-interactive refresh
+        zypper --non-interactive install \
+          git make gcc flex bison bc openssl-devel \
+          ncurses-devel perl python3 rpm-build \
+          patch cpio xz gzip rsync kmod
+
+    - name: Clone OpenSUSE kernel
+      run: |
+        git clone --depth=1 --branch=release/${{ steps.version.outputs.VERSION }} https://github.com/openSUSE/kernel.git
+        cd kernel
+        git submodule update --init --recursive
+
+    - name: Clone T2 patches
+      run: |
+        git clone --depth=1 https://github.com/t2linux/linux-t2-patches.git
+
+    - name: Apply patches
+      working-directory: ./kernel
+      run: |
+        for patch in ../linux-t2-patches/*.patch; do
+          patch -p1 < "$patch"
+        done
+
+    - name: Configure kernel
+      working-directory: ./kernel
+      run: |
+        cp config/x86_64/default .config
+        make olddefconfig
+        # Add custom version suffix
+        echo "-t2" > .scmversion
+
+    - name: Build kernel RPM packages
+      working-directory: ./kernel
+      run: |
+        make -j$(nproc) rpm-pkg
+
+    - name: List artifacts
+      run: |
+        ls -la ${{ env.RPM_DIR }}
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: kernel-rpms
+        path: |
+          ${{ env.RPM_DIR }}/*.rpm
+          ~/rpmbuild/SRPMS/*.src.rpm
+
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ${{ env.RPM_DIR }}/*.rpm
+          ~/rpmbuild/SRPMS/*.src.rpm
+        generate_release_notes: true
