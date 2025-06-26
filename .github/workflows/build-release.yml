@@ -36,7 +36,7 @@ jobs:
       run: |
         zypper --non-interactive refresh
         zypper --non-interactive install \
-          git make gcc flex bison bc openssl-devel \
+          git make gcc flex bison bc libopenssl-devel \
           ncurses-devel perl python3 rpm-build \
           patch cpio xz gzip rsync kmod hostname \
           elfutils-devel libdw-devel libelf-devel dwarves
