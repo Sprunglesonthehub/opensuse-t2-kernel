@@ -11,7 +11,7 @@ on:
 
 env:
   ARCH: x86_64
-  RPM_DIR: /home/runner/rpmbuild/RPMS/${{ env.ARCH }}
+  RPM_DIR: /home/runner/rpmbuild/RPMS/x86_64
 
 jobs:
   build-release:
