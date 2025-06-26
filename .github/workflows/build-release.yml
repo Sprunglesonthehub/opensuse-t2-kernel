@@ -12,7 +12,7 @@ on:
 env:
   ARCH: x86_64
   RPM_DIR: /home/runner/rpmbuild/RPMS/x86_64
-  STABLE_BRANCH: stable  # This targets OpenSUSE's stable kernel branch
+  STABLE_BRANCH: stable
 
 jobs:
   build-release:
@@ -28,7 +28,6 @@ jobs:
         if [[ ${{ github.event_name }} == 'workflow_dispatch' ]]; then
           echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
         else
-          # Extract version from tag (v6.6.21-t2 -> 6.6.21)
           echo "VERSION=${GITHUB_REF#refs/tags/v}" | cut -d'-' -f1 >> $GITHUB_OUTPUT
         fi
         echo "Using version: ${{ steps.version.outputs.VERSION }}"
@@ -68,9 +67,17 @@ jobs:
     - name: Configure kernel
       working-directory: ./kernel
       run: |
-        cp config/x86_64/default .config
+        # Use openSUSE's config template
+        cp /usr/src/linux/.config .config || \
+        zypper --non-interactive install kernel-source && \
+        cp /usr/src/linux/.config .config
+        
+        # Alternatively, use defconfig if above fails
+        if [ ! -f .config ]; then
+          make defconfig
+        fi
+        
         make olddefconfig
-        # Add custom version suffix
         echo "-t2" > .scmversion
 
     - name: Build kernel RPM packages
