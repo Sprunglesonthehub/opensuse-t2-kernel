@@ -38,7 +38,7 @@ jobs:
         zypper --non-interactive install \
           git make gcc flex bison bc openssl-devel \
           ncurses-devel perl python3 rpm-build \
-          patch cpio xz gzip rsync kmod kernel-source
+          patch cpio xz gzip rsync kmod
 
     - name: Clone OpenSUSE kernel (stable branch)
       run: |
@@ -64,25 +64,26 @@ jobs:
           patch -p1 < "$patch"
         done
 
-    - name: Configure kernel
+    - name: Generate kernel configuration
       working-directory: ./kernel
       run: |
-        # Get the actual kernel version number
-        KERNEL_VERSION=$(make kernelversion)
+        # Generate default configuration
+        make defconfig
         
-        # Find the installed kernel source directory
-        KERNEL_SRC_DIR=$(find /usr/src -maxdepth 1 -type d -name "linux-$KERNEL_VERSION*" | head -1)
+        # Set local version suffix
+        ./scripts/config --set-str CONFIG_LOCALVERSION "-t2"
         
-        if [ -d "$KERNEL_SRC_DIR" ]; then
-          echo "Using kernel config from: $KERNEL_SRC_DIR"
-          cp "$KERNEL_SRC_DIR/.config" .config
-        else
-          echo "Kernel source directory not found, using default config"
-          make defconfig
-        fi
+        # Enable essential options needed for booting
+        ./scripts/config --enable CONFIG_BLK_DEV_INITRD
+        ./scripts/config --enable CONFIG_64BIT
+        ./scripts/config --enable CONFIG_MODULES
+        ./scripts/config --enable CONFIG_EFI_STUB
+        ./scripts/config --enable CONFIG_EFI
+        ./scripts/config --enable CONFIG_FB
+        ./scripts/config --enable CONFIG_FRAMEBUFFER_CONSOLE
         
+        # Finalize configuration
         make olddefconfig
-        echo "-t2" > .scmversion
 
     - name: Build kernel RPM packages
       working-directory: ./kernel
