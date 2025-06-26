@@ -39,7 +39,7 @@ jobs:
           git make gcc flex bison bc libopenssl-devel \
           ncurses-devel perl python3 rpm-build \
           patch cpio xz gzip rsync kmod hostname \
-          elfutils-devel libdw-devel libelf-devel dwarves
+          elfutils libdw-devel libelf-devel dwarves
 
     - name: Clone OpenSUSE kernel (stable branch)
       run: |
