@@ -38,7 +38,7 @@ jobs:
         zypper --non-interactive install \
           git make gcc flex bison bc openssl-devel \
           ncurses-devel perl python3 rpm-build \
-          patch cpio xz gzip rsync kmod
+          patch cpio xz gzip rsync kmod hostname
 
     - name: Clone OpenSUSE kernel (stable branch)
       run: |
@@ -85,9 +85,17 @@ jobs:
         # Finalize configuration
         make olddefconfig
 
+    - name: Set up RPM build environment
+      run: |
+        mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+
     - name: Build kernel RPM packages
       working-directory: ./kernel
       run: |
+        # Workaround for hostname issue
+        export BUILD_HOST=github-runner
+        
+        # Build RPM packages
         make -j$(nproc) rpm-pkg
 
     - name: List artifacts
