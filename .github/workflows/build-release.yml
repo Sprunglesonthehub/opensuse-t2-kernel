@@ -12,9 +12,6 @@ on:
 env:
   ARCH: x86_64
   STABLE_BRANCH: stable
-  RPM_BUILD_DIR: /home/runner/rpmbuild
-  RPM_DIR: /home/runner/rpmbuild/RPMS/${{ env.ARCH }}
-  SRPM_DIR: /home/runner/rpmbuild/SRPMS
 
 jobs:
   build-release:
@@ -27,7 +24,7 @@ jobs:
     - name: Determine version
       id: version
       run: |
-        if [[ ${{ github.event_name }} == 'workflow_dispatch' ]]; then
+        if [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
           echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
         else
           echo "VERSION=${GITHUB_REF#refs/tags/v}" | cut -d'-' -f1 >> $GITHUB_OUTPUT
@@ -70,13 +67,8 @@ jobs:
     - name: Generate kernel configuration
       working-directory: ./kernel
       run: |
-        # Generate default configuration
         make defconfig
-        
-        # Set local version suffix
         ./scripts/config --set-str CONFIG_LOCALVERSION "-t2"
-        
-        # Enable essential options needed for booting
         ./scripts/config --enable CONFIG_BLK_DEV_INITRD
         ./scripts/config --enable CONFIG_64BIT
         ./scripts/config --enable CONFIG_MODULES
@@ -84,60 +76,39 @@ jobs:
         ./scripts/config --enable CONFIG_EFI
         ./scripts/config --enable CONFIG_FB
         ./scripts/config --enable CONFIG_FRAMEBUFFER_CONSOLE
-        
-        # Finalize configuration
         make olddefconfig
 
     - name: Clean working tree while preserving config
       working-directory: ./kernel
       run: |
-        # Preserve the .config file
         cp .config ../kernel.config
-        
-        # Clean the working tree
         git clean -fdx
         git reset --hard
-        
-        # Restore the config file
         mv ../kernel.config .config
-
-    - name: Set up RPM build environment
-      run: |
-        # Create the full RPM build directory structure
-        mkdir -p ${{ env.RPM_BUILD_DIR }}/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-        mkdir -p ${{ env.RPM_DIR }}  # Specifically create the arch directory
-        mkdir -p ${{ env.SRPM_DIR }}
-        echo "RPM build directories:"
-        ls -la ${{ env.RPM_BUILD_DIR }}
 
     - name: Build kernel RPM packages
       working-directory: ./kernel
       run: |
-        # Workaround for hostname issue
         export BUILD_HOST=github-runner
-        
-        # Build RPM packages
         make -j$(nproc) rpm-pkg
-        
-        # Verify RPMs were created
         echo "Built RPMs:"
-        ls -la ${{ env.RPM_DIR }}
+        find ~/rpmbuild/RPMS -name '*.rpm' -exec ls -la {} \;
         echo "Built SRPMs:"
-        ls -la ${{ env.SRPM_DIR }}
+        find ~/rpmbuild/SRPMS -name '*.src.rpm' -exec ls -la {} \;
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: kernel-rpms
         path: |
-          ${{ env.RPM_DIR }}/*.rpm
-          ${{ env.SRPM_DIR }}/*.src.rpm
+          ~/rpmbuild/RPMS/**/*.rpm
+          ~/rpmbuild/SRPMS/**/*.src.rpm
 
     - name: Create GitHub Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          ${{ env.RPM_DIR }}/*.rpm
-          ${{ env.SRPM_DIR }}/*.src.rpm
+          ~/rpmbuild/RPMS/**/*.rpm
+          ~/rpmbuild/SRPMS/**/*.src.rpm
         generate_release_notes: true
