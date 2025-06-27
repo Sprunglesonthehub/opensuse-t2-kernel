@@ -86,6 +86,12 @@ jobs:
         git reset --hard
         mv ../kernel.config .config
 
+    - name: Set up RPM macros for SUSE packaging
+      run: |
+        mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS,tmp}
+        echo '%_topdir %(echo $HOME)/rpmbuild' > ~/.rpmmacros
+        echo '%_tmppath %{_topdir}/tmp' >> ~/.rpmmacros
+
     - name: Build kernel RPM packages
       working-directory: ./kernel
       run: |
