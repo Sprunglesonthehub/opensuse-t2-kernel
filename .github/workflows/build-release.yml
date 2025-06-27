@@ -12,6 +12,9 @@ on:
 env:
   ARCH: x86_64
   STABLE_BRANCH: stable
+  RPM_BUILD_DIR: /home/runner/rpmbuild
+  RPM_DIR: /home/runner/rpmbuild/RPMS/${{ env.ARCH }}
+  SRPM_DIR: /home/runner/rpmbuild/SRPMS
 
 jobs:
   build-release:
@@ -100,11 +103,12 @@ jobs:
 
     - name: Set up RPM build environment
       run: |
-        # Create RPM build directories in home directory
-        mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-        
-        # Also create in workspace for artifact collection
-        mkdir -p rpmbuild/{RPMS,SRPMS}
+        # Create the full RPM build directory structure
+        mkdir -p ${{ env.RPM_BUILD_DIR }}/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+        mkdir -p ${{ env.RPM_DIR }}  # Specifically create the arch directory
+        mkdir -p ${{ env.SRPM_DIR }}
+        echo "RPM build directories:"
+        ls -la ${{ env.RPM_BUILD_DIR }}
 
     - name: Build kernel RPM packages
       working-directory: ./kernel
@@ -115,30 +119,25 @@ jobs:
         # Build RPM packages
         make -j$(nproc) rpm-pkg
         
-        # Find and copy built RPMs to workspace directory
-        find ~/rpmbuild/RPMS -name '*.rpm' -exec cp {} ../rpmbuild/RPMS/ \;
-        find ~/rpmbuild/SRPMS -name '*.rpm' -exec cp {} ../rpmbuild/SRPMS/ \;
-
-    - name: List artifacts
-      run: |
-        echo "RPM artifacts:"
-        ls -la rpmbuild/RPMS
-        echo "SRPM artifacts:"
-        ls -la rpmbuild/SRPMS
+        # Verify RPMs were created
+        echo "Built RPMs:"
+        ls -la ${{ env.RPM_DIR }}
+        echo "Built SRPMs:"
+        ls -la ${{ env.SRPM_DIR }}
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: kernel-rpms
         path: |
-          rpmbuild/RPMS/*.rpm
-          rpmbuild/SRPMS/*.src.rpm
+          ${{ env.RPM_DIR }}/*.rpm
+          ${{ env.SRPM_DIR }}/*.src.rpm
 
     - name: Create GitHub Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          rpmbuild/RPMS/*.rpm
-          rpmbuild/SRPMS/*.src.rpm
+          ${{ env.RPM_DIR }}/*.rpm
+          ${{ env.SRPM_DIR }}/*.src.rpm
         generate_release_notes: true
