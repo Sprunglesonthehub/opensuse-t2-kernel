@@ -1,8 +1,9 @@
-name: Build and Release Stable OpenSUSE Kernel with T2 Patches
+name: Build and Release OpenSUSE Kernel with T2 Patches
 
 on:
   push:
-    tags: 'v*'  # Trigger on version tags (e.g., v6.6.21-t2)
+    tags:
+      - 'v*'  # e.g., v6.6.21-t2
   workflow_dispatch:
     inputs:
       version:
@@ -21,50 +22,50 @@ jobs:
       options: --privileged
 
     steps:
-    - name: Determine version
-      id: version
+    - name: Set up version variable
+      id: vars
       run: |
-        if [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
         else
-          echo "VERSION=${GITHUB_REF#refs/tags/v}" | cut -d'-' -f1 >> $GITHUB_OUTPUT
+          VERSION=$(echo "${GITHUB_REF#refs/tags/v}" | cut -d'-' -f1)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         fi
-        echo "Using version: ${{ steps.version.outputs.VERSION }}"
 
-    - name: Install dependencies
+    - name: Install build dependencies
       run: |
         zypper --non-interactive refresh
         zypper --non-interactive install \
           git make gcc flex bison bc libopenssl-devel \
           ncurses-devel perl python3 rpm-build \
           patch cpio xz gzip rsync kmod hostname \
-          elfutils libdw-devel libelf-devel dwarves
+          elfutils libdw-devel libelf-devel dwarves findutils
 
-    - name: Clone OpenSUSE kernel (stable branch)
+    - name: Clone OpenSUSE kernel
       run: |
         git clone --depth=1 --branch=${{ env.STABLE_BRANCH }} https://github.com/openSUSE/kernel.git
         cd kernel
         git submodule update --init --recursive
 
-    - name: Checkout specific version if specified
-      if: steps.version.outputs.VERSION != ''
+    - name: Checkout specified kernel version
+      if: steps.vars.outputs.VERSION != ''
       working-directory: ./kernel
       run: |
         git fetch --tags
-        git checkout ${{ steps.version.outputs.VERSION }}
+        git checkout ${{ steps.vars.outputs.VERSION }}
 
     - name: Clone T2 patches
       run: |
         git clone --depth=1 https://github.com/t2linux/linux-t2-patches.git
 
-    - name: Apply patches
+    - name: Apply T2 patches
       working-directory: ./kernel
       run: |
         for patch in ../linux-t2-patches/*.patch; do
           patch -p1 < "$patch"
         done
 
-    - name: Generate kernel configuration
+    - name: Configure the kernel
       working-directory: ./kernel
       run: |
         make defconfig
@@ -78,43 +79,37 @@ jobs:
         ./scripts/config --enable CONFIG_FRAMEBUFFER_CONSOLE
         make olddefconfig
 
-    - name: Clean working tree while preserving config
+    - name: Clean tree and preserve config
       working-directory: ./kernel
       run: |
-        cp .config ../kernel.config
+        cp .config ../.kernel_config
         git clean -fdx
         git reset --hard
-        mv ../kernel.config .config
+        mv ../.kernel_config .config
 
-    - name: Set up RPM macros for SUSE packaging
-      run: |
-        mkdir -p ~/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS,tmp}
-        echo '%_topdir %(echo $HOME)/rpmbuild' > ~/.rpmmacros
-        echo '%_tmppath %{_topdir}/tmp' >> ~/.rpmmacros
-
-    - name: Build kernel RPM packages
+    - name: Build kernel RPMs
       working-directory: ./kernel
       run: |
         export BUILD_HOST=github-runner
         make -j$(nproc) rpm-pkg
-        echo "Built RPMs:"
-        find ~/rpmbuild/RPMS -name '*.rpm' -exec ls -la {} \;
-        echo "Built SRPMs:"
-        find ~/rpmbuild/SRPMS -name '*.src.rpm' -exec ls -la {} \;
 
-    - name: Upload artifacts
+    - name: Locate built RPMs
+      id: findrpms
+      run: |
+        mkdir -p /artifacts
+        find ~/rpmbuild -type f -name "*.rpm" -exec cp {} /artifacts/ \;
+        ls -lh /artifacts
+        echo "RPM_COUNT=$(ls /artifacts | wc -l)" >> $GITHUB_OUTPUT
+
+    - name: Upload RPMs
       uses: actions/upload-artifact@v4
       with:
         name: kernel-rpms
-        path: |
-          ~/rpmbuild/RPMS/**/*.rpm
-          ~/rpmbuild/SRPMS/**/*.src.rpm
+        path: /artifacts/*.rpm
 
     - name: Create GitHub Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
-        files: |
-          ~/rpmbuild/RPMS/**/*.rpm
-          ~/rpmbuild/SRPMS/**/*.src.rpm
+        files: /artifacts/*.rpm
         generate_release_notes: true
